@@ -1,5 +1,5 @@
 /* DGI office TV board.
-   One interval drives the clock, scene changes, and the four-hour reload.
+   One interval drives the clock, weather, scene changes, and the four-hour reload.
    Scenes are built once. Later ticks only toggle classes and text. */
 (function () {
   if (window.__dgiBoardStarted) return;
@@ -19,28 +19,40 @@
   var sceneNodes = [];
   var sceneLabels = [];
 
+  var WEATHER_MS = 30 * 60 * 1000;
+  var WEATHER_TIMEOUT_MS = 8000;
+  var WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=42.0834&longitude=-71.0184&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FNew_York&forecast_days=3";
+  var WEATHER_KEY = "dgi-board-weather";
+  var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var weatherBusy = false;
+  var weatherShown = false;
+  var weatherStarted = 0;
+  var nextWeatherAt = 0;
+  var weatherAbort = null;
+  var weatherToken = 0;
+
   var LINES = [
-    { id: "rms", name: "RMS", wall: "RMS", src: "assets/img/rms.jpg", alt: "RMS, Rainwater Management Solutions", lines: [], blurb: "Rainwater Management Solutions", note: "" },
-    { id: "multi", name: "Multi Fittings", wall: "Multi Fittings", src: "assets/img/multi-fittings.png", alt: "Multi Fittings", lines: [], blurb: "", note: "" },
-    { id: "matco", name: "Matco-Norca", wall: "Matco-Norca", src: "assets/img/matco-norca.png", alt: "Matco-Norca", lines: ["Valves", "Fittings", "Nipples", "Faucets", "Plumbing Specialties"], blurb: "", note: "New England (minus CT), Vermont and Upstate NY only." },
-    { id: "elbi", name: "Elbi", wall: "Elbi", src: "assets/img/elbi.jpg", alt: "Elbi of America", lines: [], blurb: "Residential and commercial products. Founded in 1990.", note: "" },
-    { id: "zurn", name: "Zurn", wall: "Zurn", src: "assets/img/zurn.png", alt: "Zurn", lines: ["Faucets", "Fixtures", "Flush Valves", "Green Turtle", "Just Sinks", "Soap Dispensers", "Traps & Supplies", "Wade Specification Drainage", "World Dryer", "Zurn Wilkins", "Zurn Specification Drainage"], blurb: "", note: "" },
-    { id: "elkay", name: "Elkay", wall: "Elkay", src: "assets/img/elkay.jpg", alt: "Elkay", lines: ["Drinking Solutions", "Faucets", "Sinks (Variety)", "Water Filtration System"], blurb: "", note: "" },
-    { id: "fayette", name: "Fayette Pipe", wall: "Fayette Pipe", src: "assets/img/fayette.jpg", alt: "Fayette Pipe", lines: [], blurb: "Veteran-owned. Standard pipe, threading, and specifications.", note: "" },
-    { id: "klein", name: "Klein Tools", wall: "Klein Tools", src: "assets/img/klein.png", alt: "Klein Tools", lines: [], blurb: "", note: "" },
-    { id: "armacell", name: "Armacell", wall: "Armacell", src: "assets/img/armacell.jpg", alt: "Armacell", lines: [], blurb: "", note: "" },
-    { id: "oetiker", name: "Oetiker", wall: "Oetiker", src: "assets/img/oetiker.svg", alt: "Oetiker", lines: [], blurb: "Connecting solutions. Founded in Switzerland in 1942.", note: "" },
-    { id: "dgi", name: "DGI Products", wall: "DGI Products", src: "assets/img/dgi-initials.png", alt: "David Gooding, Inc. products", lines: ["Brass Fittings & Nipples", "Chrome Fittings & Nipples", "Imported Malleable Fittings", "Monoflow Tees", "Cast Iron Baseboard", "Cast Iron Radiators", "Copper Tubing Types K, L & M", "ACR & Coils", "Line Sets"], blurb: "", note: "" },
-    { id: "ocs", name: "OCS Industries", wall: "OCS Industries", src: "assets/img/ocs.jpg", alt: "OCS Industries", lines: ["Cast Iron Radiator & Baseboard", "Convector Cabinets", "Convection Heating Needs"], blurb: "", note: "" },
-    { id: "heatflo", name: "Heat-Flo", wall: "Heat-Flo", src: "assets/img/heat-flo.jpg", alt: "Heat-Flo", lines: ["Indirect Water Heaters", "Dual Coil Indirects", "Hydronic Buffer Tanks", "Hot Water Storage Tanks", "Indirects with Electric Backups"], blurb: "", note: "" },
-    { id: "armstrong", name: "Armstrong Fluid Technology", wall: "Armstrong", src: "assets/img/armstrong.jpg", alt: "Armstrong", lines: ["Integrated Pumping System Controls", "Domestic Water Booster Systems", "Design Envelope Technology", "Air & Expansion Controls", "Heat Exchangers", "Replacement Parts", "CBV\u2019s, FTV\u2019s & Suction Guides", "Residential & Commercial Pumps"], blurb: "", note: "" },
-    { id: "navien", name: "Navien", wall: "Navien", src: "assets/img/navien.jpg", alt: "Navien", lines: ["On-Demand Hot Water Heater", "Heat & Hot Water Combi Unit", "Commercial/Residential Water Heater Model", "Condensing Hydronic Furnace"], blurb: "", note: "" },
-    { id: "ideal", name: "Ideal-Tridon", wall: "Ideal-Tridon", src: "assets/img/ideal-tridon.jpg", alt: "Ideal Tridon", lines: ["No Hub Couplings", "CISPI Standard Two Band", "Mid-Range Four Band", "Heavy-Duty Four Band", "\u201CClassic\u201D Import"], blurb: "", note: "" },
-    { id: "fernco", name: "Fernco", wall: "Fernco", src: "assets/img/fernco.jpg", alt: "Fernco", lines: ["Flexible Couplings"], blurb: "", note: "" },
-    { id: "panasonic", name: "Panasonic", wall: "Panasonic", src: "assets/img/panasonic.svg", alt: "Panasonic", lines: ["Full Line of Energy Star Products", "Advanced Ventilating Fans", "Whole-House Ventilation Systems"], blurb: "", note: "" },
-    { id: "roth", name: "Roth", wall: "Roth", src: "assets/img/roth.png", alt: "Roth", lines: ["Radiant & Snowmelt", "Oil Storage Tanks"], blurb: "", note: "United States and Canada since 1995." },
-    { id: "endot", name: "Endot", wall: "Endot", src: "assets/img/endot.jpg", alt: "Endot", lines: ["Endopoly Pipe", "Endopure Water Pipe", "Endotrace", "Yellow Gas Pipe", "Green Sewer Pipe"], blurb: "", note: "" },
-    { id: "nibco", name: "NIBCO", wall: "NIBCO", src: "assets/img/nibco.jpg", alt: "NIBCO", lines: ["Copper Fittings", "PVC/ABS DWV Fittings", "Schedule 40 Pressure Fittings", "PVC80 & CPVC80 Fittings & Valves", "Bronze & Iron Valves", "Ball & Butterfly Valves", "Fire Protection & Irrigation Valves", "NIBCO Press 1/2\" to 4\" Fittings, Valves & Tools", "NIBCO PEX Piping Systems"], blurb: "", note: "" }
+    { id: "rms", name: "RMS", wall: "RMS", src: "assets/img/rms.jpg", alt: "RMS, Rainwater Management Solutions", lines: [], blurb: "Rainwater Management Solutions", note: "", fact: "RMS: rainwater management solutions." },
+    { id: "multi", name: "Multi Fittings", wall: "Multi Fittings", src: "assets/img/multi-fittings.png", alt: "Multi Fittings", lines: [], blurb: "", note: "", fact: "Multi Fittings: pipe fittings." },
+    { id: "matco", name: "Matco-Norca", wall: "Matco-Norca", src: "assets/img/matco-norca.png", alt: "Matco-Norca", lines: ["Valves", "Fittings", "Nipples", "Faucets", "Plumbing Specialties"], blurb: "", note: "New England (minus CT), Vermont and Upstate NY only.", fact: "Matco-Norca: valves, fittings, nipples, faucets, and plumbing specialties." },
+    { id: "elbi", name: "Elbi", wall: "Elbi", src: "assets/img/elbi.jpg", alt: "Elbi of America", lines: [], blurb: "Residential and commercial products. Founded in 1990.", note: "", fact: "Elbi: residential and commercial products, founded in 1990." },
+    { id: "zurn", name: "Zurn", wall: "Zurn", src: "assets/img/zurn.png", alt: "Zurn", lines: ["Faucets", "Fixtures", "Flush Valves", "Green Turtle", "Just Sinks", "Soap Dispensers", "Traps & Supplies", "Wade Specification Drainage", "World Dryer", "Zurn Wilkins", "Zurn Specification Drainage"], blurb: "", note: "", fact: "Zurn: commercial plumbing fixtures, flush valves, drainage and backflow prevention." },
+    { id: "elkay", name: "Elkay", wall: "Elkay", src: "assets/img/elkay.jpg", alt: "Elkay", lines: ["Drinking Solutions", "Faucets", "Sinks (Variety)", "Water Filtration System"], blurb: "", note: "", fact: "Elkay: drinking solutions, faucets, sinks, and water filtration." },
+    { id: "fayette", name: "Fayette Pipe", wall: "Fayette Pipe", src: "assets/img/fayette.jpg", alt: "Fayette Pipe", lines: [], blurb: "Veteran-owned. Standard pipe, threading, and specifications.", note: "", fact: "Fayette Pipe: veteran-owned standard pipe, threading, and specifications." },
+    { id: "klein", name: "Klein Tools", wall: "Klein Tools", src: "assets/img/klein.png", alt: "Klein Tools", lines: [], blurb: "", note: "", fact: "Klein Tools: hand tools." },
+    { id: "armacell", name: "Armacell", wall: "Armacell", src: "assets/img/armacell.jpg", alt: "Armacell", lines: [], blurb: "", note: "", fact: "Armacell: pipe insulation." },
+    { id: "oetiker", name: "Oetiker", wall: "Oetiker", src: "assets/img/oetiker.svg", alt: "Oetiker", lines: [], blurb: "Connecting solutions. Founded in Switzerland in 1942.", note: "", fact: "Oetiker: connecting solutions, founded in Switzerland in 1942." },
+    { id: "dgi", name: "DGI Products", wall: "DGI Products", src: "assets/img/dgi-initials.png", alt: "David Gooding, Inc. products", lines: ["Brass Fittings & Nipples", "Chrome Fittings & Nipples", "Imported Malleable Fittings", "Monoflow Tees", "Cast Iron Baseboard", "Cast Iron Radiators", "Copper Tubing Types K, L & M", "ACR & Coils", "Line Sets"], blurb: "", note: "", fact: "DGI Products: fittings and nipples, cast iron radiation, copper tubing, ACR, coils, and line sets." },
+    { id: "ocs", name: "OCS Industries", wall: "OCS Industries", src: "assets/img/ocs.jpg", alt: "OCS Industries", lines: ["Cast Iron Radiator & Baseboard", "Convector Cabinets", "Convection Heating Needs"], blurb: "", note: "", fact: "OCS Industries: cast iron radiators and baseboard, convector cabinets, and convection heating." },
+    { id: "heatflo", name: "Heat-Flo", wall: "Heat-Flo", src: "assets/img/heat-flo.jpg", alt: "Heat-Flo", lines: ["Indirect Water Heaters", "Dual Coil Indirects", "Hydronic Buffer Tanks", "Hot Water Storage Tanks", "Indirects with Electric Backups"], blurb: "", note: "", fact: "Heat-Flo: indirect water heaters, buffer tanks, and hot water storage tanks." },
+    { id: "armstrong", name: "Armstrong Fluid Technology", wall: "Armstrong", src: "assets/img/armstrong.jpg", alt: "Armstrong", lines: ["Integrated Pumping System Controls", "Domestic Water Booster Systems", "Design Envelope Technology", "Air & Expansion Controls", "Heat Exchangers", "Replacement Parts", "CBV\u2019s, FTV\u2019s & Suction Guides", "Residential & Commercial Pumps"], blurb: "", note: "", fact: "Armstrong: pumps, booster systems, heat exchangers, and expansion controls." },
+    { id: "navien", name: "Navien", wall: "Navien", src: "assets/img/navien.jpg", alt: "Navien", lines: ["On-Demand Hot Water Heater", "Heat & Hot Water Combi Unit", "Commercial/Residential Water Heater Model", "Condensing Hydronic Furnace"], blurb: "", note: "", fact: "Navien: on-demand water heaters, heat and hot water combi units, and condensing hydronic furnaces." },
+    { id: "ideal", name: "Ideal-Tridon", wall: "Ideal-Tridon", src: "assets/img/ideal-tridon.jpg", alt: "Ideal Tridon", lines: ["No Hub Couplings", "CISPI Standard Two Band", "Mid-Range Four Band", "Heavy-Duty Four Band", "\u201CClassic\u201D Import"], blurb: "", note: "", fact: "Ideal-Tridon: no-hub couplings." },
+    { id: "fernco", name: "Fernco", wall: "Fernco", src: "assets/img/fernco.jpg", alt: "Fernco", lines: ["Flexible Couplings"], blurb: "", note: "", fact: "Fernco: flexible couplings." },
+    { id: "panasonic", name: "Panasonic", wall: "Panasonic", src: "assets/img/panasonic.svg", alt: "Panasonic", lines: ["Full Line of Energy Star Products", "Advanced Ventilating Fans", "Whole-House Ventilation Systems"], blurb: "", note: "", fact: "Panasonic: ventilating fans and whole-house ventilation systems." },
+    { id: "roth", name: "Roth", wall: "Roth", src: "assets/img/roth.png", alt: "Roth", lines: ["Radiant & Snowmelt", "Oil Storage Tanks"], blurb: "", note: "United States and Canada since 1995.", fact: "Roth: radiant and snowmelt systems and oil storage tanks." },
+    { id: "endot", name: "Endot", wall: "Endot", src: "assets/img/endot.jpg", alt: "Endot", lines: ["Endopoly Pipe", "Endopure Water Pipe", "Endotrace", "Yellow Gas Pipe", "Green Sewer Pipe"], blurb: "", note: "", fact: "Endot: water pipe, gas pipe, and sewer pipe." },
+    { id: "nibco", name: "NIBCO", wall: "NIBCO", src: "assets/img/nibco.jpg", alt: "NIBCO", lines: ["Copper Fittings", "PVC/ABS DWV Fittings", "Schedule 40 Pressure Fittings", "PVC80 & CPVC80 Fittings & Valves", "Bronze & Iron Valves", "Ball & Butterfly Valves", "Fire Protection & Irrigation Valves", "NIBCO Press 1/2\" to 4\" Fittings, Valves & Tools", "NIBCO PEX Piping Systems"], blurb: "", note: "", fact: "NIBCO: copper, PVC, ABS, CPVC, bronze, and iron fittings and valves, plus press and PEX." }
   ];
 
   var GROUPS = [
@@ -115,9 +127,10 @@
     var copy = el("div", "spot-copy");
     copy.appendChild(el("p", "kicker", kicker));
     copy.appendChild(el("h2", "", line.name));
+    if (line.fact) copy.appendChild(el("p", "fact", line.fact));
     if (line.note) copy.appendChild(el("p", "note", line.note));
     if (line.lines.length) copy.appendChild(lineList(line));
-    else if (line.blurb) copy.appendChild(el("p", "blurb", line.blurb));
+    else if (line.blurb && !line.fact) copy.appendChild(el("p", "blurb", line.blurb));
     wrap.appendChild(copy);
     return wrap;
   }
@@ -406,6 +419,135 @@
     return 0;
   }
 
+  function weekdayName(iso) {
+    var parts = String(iso || "").split("-");
+    if (parts.length !== 3) return "";
+    var y = parseInt(parts[0], 10);
+    var m = parseInt(parts[1], 10);
+    var d = parseInt(parts[2], 10);
+    if (!y || !m || !d) return "";
+    var date = new Date(y, m - 1, d);
+    if (isNaN(date.getTime())) return "";
+    return WEEKDAYS[date.getDay()];
+  }
+
+  function weatherKind(code) {
+    if (code === 0) return "clear";
+    if (code === 1 || code === 2) return "partly";
+    if (code === 3) return "cloudy";
+    if (code === 45 || code === 48) return "fog";
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return "snow";
+    if (code >= 95) return "storm";
+    if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82)) return "rain";
+    return "cloudy";
+  }
+
+  function validWeather(data) {
+    if (!data || data.v !== 1) return false;
+    if (typeof data.temp !== "number" || !isFinite(data.temp)) return false;
+    if (typeof data.code !== "number" || !isFinite(data.code)) return false;
+    if (!data.days || data.days.length < 3) return false;
+    var n;
+    for (n = 0; n < 3; n++) {
+      var day = data.days[n];
+      if (!day || typeof day.d !== "string" || !day.d) return false;
+      if (typeof day.hi !== "number" || typeof day.lo !== "number") return false;
+      if (!isFinite(day.hi) || !isFinite(day.lo)) return false;
+    }
+    return true;
+  }
+
+  function packWeather(json) {
+    var cur = json && json.current;
+    var daily = json && json.daily;
+    if (!cur || !daily || !daily.time || !daily.temperature_2m_max || !daily.temperature_2m_min) return null;
+    var temp = Math.round(Number(cur.temperature_2m));
+    var code = Number(cur.weather_code);
+    if (!isFinite(temp) || !isFinite(code)) return null;
+    var days = [];
+    var n;
+    for (n = 0; n < 3; n++) {
+      var name = weekdayName(daily.time[n]);
+      var hi = Math.round(Number(daily.temperature_2m_max[n]));
+      var lo = Math.round(Number(daily.temperature_2m_min[n]));
+      if (!name || !isFinite(hi) || !isFinite(lo)) return null;
+      days.push({ d: name, hi: hi, lo: lo });
+    }
+    return { v: 1, temp: temp, code: code, days: days };
+  }
+
+  function readWeatherCache() {
+    try {
+      var data = JSON.parse(localStorage.getItem(WEATHER_KEY) || "null");
+      if (!validWeather(data)) return null;
+      return data;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function hideWeather() {
+    var box = document.getElementById("weather");
+    if (box) box.hidden = true;
+    weatherShown = false;
+  }
+
+  function paintWeather(data) {
+    if (!validWeather(data)) return;
+    var box = document.getElementById("weather");
+    var icon = document.getElementById("wx-icon");
+    var temp = document.getElementById("wx-temp");
+    var days = box ? box.getElementsByClassName("wx-day") : [];
+    if (!box || !icon || !temp || days.length < 3) return;
+    icon.setAttribute("data-kind", weatherKind(data.code));
+    temp.textContent = data.temp + "\u00b0F";
+    var n;
+    for (n = 0; n < 3; n++) {
+      var dow = days[n].getElementsByClassName("wx-dow")[0];
+      var range = days[n].getElementsByClassName("wx-range")[0];
+      if (dow) dow.textContent = data.days[n].d;
+      if (range) range.textContent = data.days[n].hi + "\u00b0/" + data.days[n].lo + "\u00b0";
+    }
+    box.hidden = false;
+    weatherShown = true;
+  }
+
+  function refreshWeather() {
+    if (weatherBusy) return;
+    if (typeof fetch !== "function" || typeof AbortController !== "function") {
+      if (!weatherShown) hideWeather();
+      nextWeatherAt = Date.now() + WEATHER_MS;
+      return;
+    }
+    weatherBusy = true;
+    weatherStarted = Date.now();
+    nextWeatherAt = weatherStarted + WEATHER_MS;
+    var token = weatherToken;
+    var controller = new AbortController();
+    weatherAbort = controller;
+    fetch(WEATHER_URL, { signal: controller.signal })
+      .then(function (res) {
+        if (!res || !res.ok) throw new Error("wx");
+        return res.json();
+      })
+      .then(function (json) {
+        if (token !== weatherToken) return;
+        var data = packWeather(json);
+        if (!validWeather(data)) throw new Error("wx");
+        try { localStorage.setItem(WEATHER_KEY, JSON.stringify(data)); } catch (err) {}
+        paintWeather(data);
+      })
+      .catch(function () {
+        if (token !== weatherToken) return;
+        if (!weatherShown) hideWeather();
+      })
+      .then(function () {
+        if (token !== weatherToken) return;
+        weatherBusy = false;
+        if (weatherAbort === controller) weatherAbort = null;
+      });
+  }
+
   function tick() {
     if (gaveUp) {
       try { updateClock(); } catch (err) {}
@@ -418,6 +560,16 @@
         return;
       }
       updateClock();
+      if (weatherBusy && weatherAbort && now - weatherStarted >= WEATHER_TIMEOUT_MS) {
+        try { weatherAbort.abort(); } catch (abortErr) {}
+        weatherAbort = null;
+      }
+      if (weatherBusy && now - weatherStarted >= WEATHER_TIMEOUT_MS + 2000) {
+        weatherBusy = false;
+        weatherToken += 1;
+        if (!weatherShown) hideWeather();
+      }
+      if (!weatherBusy && now >= nextWeatherAt) refreshWeather();
       if (!freeze && now >= nextSceneAt) advance();
     } catch (err) {
       noteFailure();
@@ -431,6 +583,8 @@
     document.head.appendChild(style);
     fit();
     updateClock();
+    try { paintWeather(readWeatherCache()); } catch (err) {}
+    try { refreshWeather(); } catch (err2) {}
     activate(startIndex());
     if (timer === null) timer = setInterval(tick, TICK_MS);
     window.addEventListener("resize", fit);

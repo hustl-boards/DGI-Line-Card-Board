@@ -20,9 +20,51 @@
           <div class="board-title">New England Line Card</div>
           <div class="board-sub">Plumbing · Heating · Waterworks</div>
         </div>
-        <div class="clock" aria-hidden="true">
-          <div class="clock-time" id="clock-time">–:–</div>
-          <div class="clock-date" id="clock-date"></div>
+        <div class="corner">
+          <div class="weather" id="weather" hidden>
+            <div class="wx-now">
+              <span class="wx-icon" id="wx-icon" data-kind="cloudy" aria-hidden="true">
+                <svg class="kind-clear" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4.1" fill="currentColor" stroke="none"></circle>
+                  <path d="M12 1.7v2.5M12 19.8v2.5M1.7 12h2.5M19.8 12h2.5M4.5 4.5l1.8 1.8M17.7 17.7l1.8 1.8M19.5 4.5l-1.8 1.8M6.3 17.7l-1.8 1.8"></path>
+                </svg>
+                <svg class="kind-partly" viewBox="0 0 24 24">
+                  <circle cx="17" cy="6.2" r="2.5" fill="currentColor" stroke="none"></circle>
+                  <path d="M17 1.2v1.5M21.4 3.4l-1.1 1.1M22.2 6.2h-1.6M21 9.2l-1-.9M14.2 3.6l1 .9"></path>
+                  <path fill="currentColor" stroke="none" d="M5.4 19h8.4a2.8 2.8 0 0 0 .3-5.6 4.1 4.1 0 0 0-7.8-1.1 2.7 2.7 0 0 0-.9 6.7z"></path>
+                </svg>
+                <svg class="kind-cloudy" viewBox="0 0 24 24">
+                  <path fill="currentColor" stroke="none" d="M6.2 18.2h10a3.4 3.4 0 0 0 .4-6.8 5 5 0 0 0-9.6-1.2 3.3 3.3 0 0 0-.8 8z"></path>
+                </svg>
+                <svg class="kind-fog" viewBox="0 0 24 24">
+                  <path fill="currentColor" stroke="none" d="M6.4 13.2h9.4a3 3 0 0 0 .3-6 4.4 4.4 0 0 0-8.4-1 2.9 2.9 0 0 0-1.3 7z"></path>
+                  <path d="M4 16.6h16M6 20h12"></path>
+                </svg>
+                <svg class="kind-rain" viewBox="0 0 24 24">
+                  <path fill="currentColor" stroke="none" d="M6.2 14.4h10a3.2 3.2 0 0 0 .3-6.4 4.7 4.7 0 0 0-9-1.2 3.1 3.1 0 0 0-.3 7.6z"></path>
+                  <path d="M8.2 16.6v3.2M12 16.6v4M15.8 16.6v3.2"></path>
+                </svg>
+                <svg class="kind-snow" viewBox="0 0 24 24">
+                  <path fill="currentColor" stroke="none" d="M6.2 14.2h10a3.2 3.2 0 0 0 .3-6.4 4.7 4.7 0 0 0-9-1.2 3.1 3.1 0 0 0-.3 7.6z"></path>
+                  <path d="M8.2 17.2v2.6M8.2 18.5h2.2M15.8 17.2v2.6M13.6 18.5h2.2M12 16.8v3.4M10.6 18.5h2.8"></path>
+                </svg>
+                <svg class="kind-storm" viewBox="0 0 24 24">
+                  <path fill="currentColor" stroke="none" d="M6 13.6h9.6a3.1 3.1 0 0 0 .3-6.2 4.5 4.5 0 0 0-8.6-1.1A3 3 0 0 0 6 13.6z"></path>
+                  <path fill="currentColor" stroke="none" d="M12.4 12.6h-2.2l-.8 3.4h2.1L10.2 20l4.2-5.2h-2.3l.3-2.2z"></path>
+                </svg>
+              </span>
+              <div class="wx-temp" id="wx-temp"></div>
+            </div>
+            <div class="wx-days">
+              <div class="wx-day"><div class="wx-dow"></div><div class="wx-range"></div></div>
+              <div class="wx-day"><div class="wx-dow"></div><div class="wx-range"></div></div>
+              <div class="wx-day"><div class="wx-dow"></div><div class="wx-range"></div></div>
+            </div>
+          </div>
+          <div class="clock" aria-hidden="true">
+            <div class="clock-time" id="clock-time">–:–</div>
+            <div class="clock-date" id="clock-date"></div>
+          </div>
         </div>
       </header>
       <main class="stage-main" id="stage-main"></main>

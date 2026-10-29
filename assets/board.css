@@ -104,6 +104,92 @@ h1, h2, h3, p, ul { margin: 0; padding: 0; }
 
 .board-heading { text-align: center; }
 
+.corner {
+  position: absolute;
+  right: 36px;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  z-index: 4;
+}
+
+.weather {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-right: 20px;
+  border-right: 2px solid rgba(255, 255, 255, 0.22);
+}
+
+.weather[hidden] { display: none; }
+
+.wx-now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wx-icon {
+  width: 42px;
+  height: 42px;
+  color: var(--yellow);
+  flex: none;
+}
+
+.wx-icon svg {
+  display: none;
+  width: 42px;
+  height: 42px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.wx-icon[data-kind="clear"] .kind-clear,
+.wx-icon[data-kind="partly"] .kind-partly,
+.wx-icon[data-kind="cloudy"] .kind-cloudy,
+.wx-icon[data-kind="fog"] .kind-fog,
+.wx-icon[data-kind="rain"] .kind-rain,
+.wx-icon[data-kind="snow"] .kind-snow,
+.wx-icon[data-kind="storm"] .kind-storm { display: block; }
+
+.wx-temp {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.wx-days {
+  display: flex;
+  gap: 16px;
+}
+
+.wx-dow {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  line-height: 1;
+}
+
+.wx-range {
+  margin-top: 5px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .board-title {
   font-size: 30px;
   font-weight: 800;
@@ -121,7 +207,7 @@ h1, h2, h3, p, ul { margin: 0; padding: 0; }
   color: var(--mist);
 }
 
-.clock { text-align: right; }
+.clock { text-align: right; white-space: nowrap; }
 
 .clock-time {
   font-size: 36px;
@@ -379,6 +465,20 @@ h1, h2 { font-weight: 800; letter-spacing: -0.03em; color: var(--white); }
 }
 
 .spot h2 { font-size: 72px; line-height: 0.98; }
+
+.fact {
+  margin-top: 14px;
+  max-width: 28em;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--mist);
+}
+
+.fact + .note { margin-top: 16px; }
+
+.fact + .line-list,
+.note + .line-list { margin-top: 18px; }
 
 .note {
   display: inline-block;
