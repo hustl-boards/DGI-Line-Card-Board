@@ -1,29 +1,59 @@
-/* DGI office TV board.
-   One interval drives the clock, weather, scene changes, and the four-hour reload.
+/* DGI office TV board. board-version: 2
+   One interval drives the clock, weather, and scene changes.
+   One watchdog timeout advances a scene that stays up too long.
+   The page reloads about every six hours, and only while online.
    Scenes are built once. Later ticks only toggle classes and text. */
 (function () {
   if (window.__dgiBoardStarted) return;
   window.__dgiBoardStarted = true;
 
+  var BOARD_VERSION = 2;
   var SCENE_MS = readInterval();
   var TICK_MS = 500;
-  var RELOAD_MS = 4 * 60 * 60 * 1000;
+  var RELOAD_MS = 6 * 60 * 60 * 1000;
+  var WATCHDOG_GRACE_MS = 2500;
   var freeze = query("freeze") === "1";
   var booted = Date.now();
   var nextSceneAt = booted + SCENE_MS;
+  var sceneShownAt = booted;
   var timer = null;
+  var watchdog = null;
+  var listening = false;
   var failures = 0;
   var gaveUp = false;
   var reloading = false;
   var current = 0;
   var sceneNodes = [];
   var sceneLabels = [];
+  var timeNode = null;
+  var dateNode = null;
+  var labelNode = null;
+  var countNode = null;
+  var progressBar = null;
+  var lastClockKey = "";
+  var FALLBACK_SRC = "assets/img/dgi-initials.png";
+  var preloaded = {};
 
   var WEATHER_MS = 30 * 60 * 1000;
   var WEATHER_TIMEOUT_MS = 8000;
   var WEATHER_URL = "https://api.open-meteo.com/v1/forecast?latitude=42.0834&longitude=-71.0184&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=America%2FNew_York&forecast_days=3";
   var WEATHER_KEY = "dgi-board-weather";
   var WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  var clockFormat = null;
+  try {
+    clockFormat = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true
+    });
+  } catch (err) {
+    clockFormat = null;
+  }
   var weatherBusy = false;
   var weatherShown = false;
   var weatherStarted = 0;
@@ -92,10 +122,72 @@
     return node;
   }
 
+  function preloadImage(src) {
+    if (!src || preloaded[src]) return;
+    var image = new Image();
+    preloaded[src] = image;
+    image.onerror = function () {
+      image.onerror = null;
+    };
+    image.src = src;
+  }
+
+  function preloadLogos() {
+    var seen = {};
+    var n;
+    function once(src) {
+      if (!src || seen[src]) return;
+      seen[src] = true;
+      preloadImage(src);
+    }
+    once(FALLBACK_SRC);
+    var header = document.querySelector(".brand-lockup img");
+    if (header) once(header.getAttribute("src"));
+    for (n = 0; n < LINES.length; n++) once(LINES[n].src);
+  }
+
+  function bindImage(image, src) {
+    image.onerror = function () {
+      image.onerror = null;
+      if (image.getAttribute("data-fallback") === "1" || src === FALLBACK_SRC) {
+        image.style.visibility = "hidden";
+        return;
+      }
+      image.setAttribute("data-fallback", "1");
+      image.onerror = function () {
+        image.onerror = null;
+        image.style.visibility = "hidden";
+      };
+      image.src = FALLBACK_SRC;
+    };
+    image.src = src;
+  }
+
+  function armHeaderLogo() {
+    var img = document.querySelector(".brand-lockup img");
+    if (!img || img.getAttribute("data-armed") === "1") return;
+    img.setAttribute("data-armed", "1");
+    var src = img.getAttribute("src");
+    img.onerror = function () {
+      img.onerror = null;
+      if (img.getAttribute("data-fallback") === "1" || src === FALLBACK_SRC) {
+        img.style.visibility = "hidden";
+        return;
+      }
+      img.setAttribute("data-fallback", "1");
+      img.onerror = function () {
+        img.onerror = null;
+        img.style.visibility = "hidden";
+      };
+      img.src = FALLBACK_SRC;
+    };
+    if (img.complete && img.naturalWidth === 0) img.onerror();
+  }
+
   function lineImage(line) {
     var image = document.createElement("img");
-    image.src = line.src;
     image.alt = line.alt || line.name;
+    bindImage(image, line.src);
     return image;
   }
 
@@ -152,8 +244,8 @@
     var wrap = el("div", "welcome");
     var mark = el("div", "initials");
     var image = document.createElement("img");
-    image.src = "assets/img/dgi-initials.png";
     image.alt = "David Gooding, Inc.";
+    bindImage(image, "assets/img/dgi-initials.png");
     mark.appendChild(image);
     wrap.appendChild(mark);
     wrap.appendChild(el("p", "kicker", "Manufacturers\u2019 Representative  \u00b7  Founded 1980"));
@@ -289,17 +381,17 @@
   }
 
   function restartProgress() {
-    var bar = document.getElementById("progress-bar");
-    if (!bar) return;
+    if (!progressBar) progressBar = document.getElementById("progress-bar");
+    if (!progressBar) return;
     if (freeze) {
-      bar.style.animation = "none";
-      bar.style.width = "100%";
+      progressBar.style.animation = "none";
+      progressBar.style.transform = "scaleX(1)";
       return;
     }
-    bar.style.animation = "none";
-    bar.style.width = "0";
-    void bar.offsetWidth;
-    bar.style.animation = "fill " + SCENE_MS + "ms linear forwards";
+    progressBar.style.animation = "none";
+    progressBar.style.transform = "";
+    void progressBar.offsetWidth;
+    progressBar.style.animation = "fill " + SCENE_MS + "ms linear forwards";
   }
 
   function activate(index) {
@@ -314,12 +406,14 @@
     current = index;
     sceneNodes[current].classList.add("is-active");
     sceneNodes[current].setAttribute("aria-hidden", "false");
-    var label = document.getElementById("scene-label");
-    var count = document.getElementById("scene-count");
-    if (label) label.textContent = sceneLabels[current];
-    if (count) count.textContent = two(current + 1) + "  /  " + two(sceneNodes.length);
+    if (!labelNode) labelNode = document.getElementById("scene-label");
+    if (!countNode) countNode = document.getElementById("scene-count");
+    if (labelNode) labelNode.textContent = sceneLabels[current];
+    if (countNode) countNode.textContent = two(current + 1) + "  /  " + two(sceneNodes.length);
     restartProgress();
-    nextSceneAt = Date.now() + SCENE_MS;
+    sceneShownAt = Date.now();
+    nextSceneAt = sceneShownAt + SCENE_MS;
+    armWatchdog();
   }
 
   function advance() {
@@ -328,18 +422,45 @@
 
   function updateClock() {
     var now = new Date();
-    var h = now.getHours();
-    var m = now.getMinutes();
-    var ampm = h >= 12 ? "PM" : "AM";
-    var hr = h % 12;
-    if (hr === 0) hr = 12;
-    var mm = m < 10 ? "0" + m : "" + m;
-    var timeText = hr + ":" + mm + " " + ampm;
-    var days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    var dateText = days[now.getDay()] + ", " + months[now.getMonth()] + " " + now.getDate();
-    var timeNode = document.getElementById("clock-time");
-    var dateNode = document.getElementById("clock-date");
+    var minuteKey = now.getFullYear() + "-" + now.getMonth() + "-" + now.getDate() + "-" + now.getHours() + "-" + now.getMinutes();
+    if (minuteKey === lastClockKey) return;
+    var timeText;
+    var dateText;
+    if (clockFormat && clockFormat.formatToParts) {
+      var parts = clockFormat.formatToParts(now);
+      var hour = "";
+      var minute = "";
+      var dayPeriod = "";
+      var weekday = "";
+      var month = "";
+      var day = "";
+      var n;
+      for (n = 0; n < parts.length; n++) {
+        var type = parts[n].type;
+        var value = parts[n].value;
+        if (type === "hour") hour = value;
+        else if (type === "minute") minute = value;
+        else if (type === "dayPeriod") dayPeriod = value;
+        else if (type === "weekday") weekday = value;
+        else if (type === "month") month = value;
+        else if (type === "day") day = value;
+      }
+      timeText = (hour + ":" + minute + " " + dayPeriod).replace(/\u202f|\u00a0/g, " ");
+      dateText = weekday + ", " + month + " " + day;
+    } else {
+      var h = now.getHours();
+      var m = now.getMinutes();
+      var ampm = h >= 12 ? "PM" : "AM";
+      var hr = h % 12;
+      if (hr === 0) hr = 12;
+      var mm = m < 10 ? "0" + m : "" + m;
+      timeText = hr + ":" + mm + " " + ampm;
+      dateText = DAYS[now.getDay()] + ", " + MONTHS[now.getMonth()] + " " + now.getDate();
+    }
+    if (!timeText || timeText.indexOf("undefined") !== -1) return;
+    lastClockKey = minuteKey;
+    if (!timeNode) timeNode = document.getElementById("clock-time");
+    if (!dateNode) dateNode = document.getElementById("clock-date");
     if (timeNode && timeNode.textContent !== timeText) timeNode.textContent = timeText;
     if (dateNode && dateNode.textContent !== dateText) dateNode.textContent = dateText;
   }
@@ -352,10 +473,65 @@
     stage.style.transform = "scale(" + s + ")";
   }
 
+  function isOnline() {
+    return typeof navigator === "undefined" || navigator.onLine !== false;
+  }
+
+  function cleanup() {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+    clearWatchdog();
+    if (weatherAbort) {
+      try { weatherAbort.abort(); } catch (err) {}
+      weatherAbort = null;
+    }
+    weatherToken += 1;
+    weatherBusy = false;
+    if (listening) {
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", noteFailure);
+      listening = false;
+    }
+  }
+
   function safeReload() {
     if (reloading) return;
+    if (!isOnline()) return;
     reloading = true;
+    cleanup();
     location.reload();
+  }
+
+  function clearWatchdog() {
+    if (watchdog !== null) {
+      clearTimeout(watchdog);
+      watchdog = null;
+    }
+  }
+
+  function armWatchdog() {
+    clearWatchdog();
+    if (freeze || gaveUp || reloading || !sceneNodes.length) return;
+    var expected = current;
+    watchdog = setTimeout(function () {
+      watchdog = null;
+      if (gaveUp || reloading || freeze) return;
+      if (current !== expected) return;
+      try {
+        advance();
+      } catch (err) {
+        noteFailure();
+      }
+    }, SCENE_MS + WATCHDOG_GRACE_MS);
+  }
+
+  function onWindowError(event) {
+    var target = event && event.target;
+    if (target && target !== window && target.nodeType === 1) return;
+    noteFailure();
   }
 
   function stormList() {
@@ -395,6 +571,7 @@
     }
     if (tooManyReloads()) {
       gaveUp = true;
+      clearWatchdog();
       try { activate(0); } catch (err2) {}
       return;
     }
@@ -492,6 +669,14 @@
     weatherShown = false;
   }
 
+  function useCachedOrHide() {
+    if (weatherShown) return;
+    var cached = null;
+    try { cached = readWeatherCache(); } catch (err) { cached = null; }
+    if (cached) paintWeather(cached);
+    else hideWeather();
+  }
+
   function paintWeather(data) {
     if (!validWeather(data)) return;
     var box = document.getElementById("weather");
@@ -513,39 +698,51 @@
   }
 
   function refreshWeather() {
-    if (weatherBusy) return;
+    if (weatherBusy || reloading) return;
+    var now = Date.now();
     if (typeof fetch !== "function" || typeof AbortController !== "function") {
-      if (!weatherShown) hideWeather();
-      nextWeatherAt = Date.now() + WEATHER_MS;
+      useCachedOrHide();
+      nextWeatherAt = now + WEATHER_MS;
       return;
     }
     weatherBusy = true;
-    weatherStarted = Date.now();
-    nextWeatherAt = weatherStarted + WEATHER_MS;
+    weatherStarted = now;
+    nextWeatherAt = now + WEATHER_MS;
     var token = weatherToken;
-    var controller = new AbortController();
-    weatherAbort = controller;
-    fetch(WEATHER_URL, { signal: controller.signal })
-      .then(function (res) {
-        if (!res || !res.ok) throw new Error("wx");
-        return res.json();
-      })
-      .then(function (json) {
-        if (token !== weatherToken) return;
-        var data = packWeather(json);
-        if (!validWeather(data)) throw new Error("wx");
-        try { localStorage.setItem(WEATHER_KEY, JSON.stringify(data)); } catch (err) {}
-        paintWeather(data);
-      })
-      .catch(function () {
-        if (token !== weatherToken) return;
-        if (!weatherShown) hideWeather();
-      })
-      .then(function () {
-        if (token !== weatherToken) return;
-        weatherBusy = false;
-        if (weatherAbort === controller) weatherAbort = null;
-      });
+    var controller = null;
+    try {
+      controller = new AbortController();
+      weatherAbort = controller;
+      fetch(WEATHER_URL, { signal: controller.signal })
+        .then(function (res) {
+          if (!res || !res.ok) throw new Error("wx");
+          return res.json();
+        })
+        .then(function (json) {
+          if (token !== weatherToken) return;
+          try {
+            var data = packWeather(json);
+            if (!validWeather(data)) throw new Error("wx");
+            try { localStorage.setItem(WEATHER_KEY, JSON.stringify(data)); } catch (err) {}
+            paintWeather(data);
+          } catch (err2) {
+            useCachedOrHide();
+          }
+        })
+        .catch(function () {
+          if (token !== weatherToken) return;
+          useCachedOrHide();
+        })
+        .then(function () {
+          if (token !== weatherToken) return;
+          weatherBusy = false;
+          if (weatherAbort === controller) weatherAbort = null;
+        });
+    } catch (err) {
+      weatherBusy = false;
+      if (weatherAbort === controller) weatherAbort = null;
+      useCachedOrHide();
+    }
   }
 
   function tick() {
@@ -555,10 +752,6 @@
     }
     try {
       var now = Date.now();
-      if (!freeze && now - booted >= RELOAD_MS) {
-        safeReload();
-        return;
-      }
       updateClock();
       if (weatherBusy && weatherAbort && now - weatherStarted >= WEATHER_TIMEOUT_MS) {
         try { weatherAbort.abort(); } catch (abortErr) {}
@@ -567,32 +760,52 @@
       if (weatherBusy && now - weatherStarted >= WEATHER_TIMEOUT_MS + 2000) {
         weatherBusy = false;
         weatherToken += 1;
-        if (!weatherShown) hideWeather();
+        useCachedOrHide();
       }
       if (!weatherBusy && now >= nextWeatherAt) refreshWeather();
-      if (!freeze && now >= nextSceneAt) advance();
+      if (!freeze && now - booted >= RELOAD_MS && now >= nextSceneAt) {
+        if (isOnline()) {
+          safeReload();
+          return;
+        }
+      }
+      if (!freeze && sceneShownAt && now - sceneShownAt >= SCENE_MS + WATCHDOG_GRACE_MS) advance();
+      else if (!freeze && now >= nextSceneAt) advance();
     } catch (err) {
       noteFailure();
     }
   }
 
+  function cacheNodes() {
+    timeNode = document.getElementById("clock-time");
+    dateNode = document.getElementById("clock-date");
+    labelNode = document.getElementById("scene-label");
+    countNode = document.getElementById("scene-count");
+    progressBar = document.getElementById("progress-bar");
+  }
+
   function boot() {
+    cacheNodes();
+    preloadLogos();
+    armHeaderLogo();
     build();
-    var style = document.createElement("style");
-    style.textContent = "@keyframes fill { from { width: 0; } to { width: 100%; } }";
-    document.head.appendChild(style);
     fit();
     updateClock();
     try { paintWeather(readWeatherCache()); } catch (err) {}
     try { refreshWeather(); } catch (err2) {}
     activate(startIndex());
     if (timer === null) timer = setInterval(tick, TICK_MS);
-    window.addEventListener("resize", fit);
-    window.addEventListener("error", noteFailure);
-    window.addEventListener("unhandledrejection", noteFailure);
+    if (!listening) {
+      window.addEventListener("resize", fit);
+      window.addEventListener("error", onWindowError);
+      window.addEventListener("unhandledrejection", noteFailure);
+      listening = true;
+    }
     window.__dgiBoard = {
+      version: BOARD_VERSION,
       sceneCount: sceneNodes.length,
       sceneMs: SCENE_MS,
+      reloadMs: RELOAD_MS,
       get index() { return current; },
       get label() { return sceneLabels[current]; },
       get errors() { return failures; },
