@@ -16,4 +16,4 @@ python3 -m http.server 8080
 
 Designed at 1920×1080 and scaled to the screen. No build step. No external fonts or images. Weather is the current temperature and a three-day outlook for Brockton, Massachusetts, from Open-Meteo (no API key). GitHub Pages serves this repository from `main` at the site root.
 
-The page keeps a single timer, does not grow the document while it runs, and reloads itself every four hours so a TV browser can stay up. That timer also refreshes weather every 30 minutes. The last good reading stays in local storage, and the widget hides if there is nothing to show.
+The page keeps a single timer, does not grow the document while it runs, and reloads itself about every six hours when the browser is online so a TV can stay up. That timer also refreshes weather every 30 minutes. The last good reading stays in local storage, and the widget hides if a fetch fails and there is nothing saved. A watchdog moves to the next scene if one stays up too long. Logos are preloaded once and drop to the DGI mark if a file fails.
